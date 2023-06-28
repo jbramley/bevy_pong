@@ -56,6 +56,12 @@ pub struct Velocity {
 #[derive(Component)]
 pub struct Collider;
 
+#[derive(Resource)]
+pub struct Score {
+    player: i32,
+    cpu: i32,
+}
+
 #[derive(Actionlike, PartialEq, Eq, Clone, Copy, Hash, Debug)]
 enum Action {
     Up,
@@ -77,7 +83,7 @@ fn main() {
             ..default()
         }))
         .add_plugin(InputManagerPlugin::<Action>::default())
-        .add_plugin(WorldInspectorPlugin::new())
+        // .add_plugin(WorldInspectorPlugin::new())
         .register_type::<Paddle>()
         .add_system(player_input)
         .add_system(opponent_input)
@@ -89,6 +95,8 @@ fn main() {
                 .before(check_for_collisions)
                 .after(apply_velocity),
         ))
+        .add_system(update_score)
+        .insert_resource(Score { player: 0, cpu: 0 })
         .run();
 }
 
@@ -218,27 +226,75 @@ fn spawn_basic_scene(
         .insert(Collider)
         .insert(Wall);
 
-    commands.spawn(
-        TextBundle::from_section(
-            "Hello",
-            TextStyle {
-                font: asset_server.load("fonts/FiraMono-Medium.ttf"),
-                font_size: SCOREBOARD_FONT_SIZE,
-                color: SCORE_COLOR,
+    commands
+        .spawn(
+            TextBundle::from_sections([
+                TextSection {
+                    style: TextStyle {
+                        font: asset_server.load("fonts/FiraMono-Medium.ttf"),
+                        font_size: SCOREBOARD_FONT_SIZE,
+                        color: SCORE_COLOR,
+                        ..default()
+                    },
+                    value: "you   ".to_string(),
+                },
+                TextSection {
+                    style: TextStyle {
+                        font: asset_server.load("fonts/FiraMono-Medium.ttf"),
+                        font_size: SCOREBOARD_FONT_SIZE,
+                        color: SCORE_COLOR,
+                        ..default()
+                    },
+                    value: "0".to_string(),
+                },
+            ])
+            .with_style(Style {
+                position_type: PositionType::Absolute,
+                position: UiRect::new(
+                    SCOREBOARD_LEFT,
+                    SCOREBOARD_MIDDLE,
+                    SCOREBOARD_TOP,
+                    SCOREBOARD_BOTTOM,
+                ),
                 ..default()
-            },
+            }),
         )
-        .with_style(Style {
-            position_type: PositionType::Absolute,
-            position: UiRect::new(
-                SCOREBOARD_LEFT,
-                SCOREBOARD_MIDDLE,
-                SCOREBOARD_TOP,
-                SCOREBOARD_BOTTOM,
-            ),
-            ..default()
-        }),
-    );
+        .insert(Player);
+    commands
+        .spawn(
+            TextBundle::from_sections([
+                TextSection {
+                    style: TextStyle {
+                        font: asset_server.load("fonts/FiraMono-Medium.ttf"),
+                        font_size: SCOREBOARD_FONT_SIZE,
+                        color: SCORE_COLOR,
+                        ..default()
+                    },
+                    value: "0".to_string(),
+                },
+                TextSection {
+                    style: TextStyle {
+                        font: asset_server.load("fonts/FiraMono-Medium.ttf"),
+                        font_size: SCOREBOARD_FONT_SIZE,
+                        color: SCORE_COLOR,
+                        ..default()
+                    },
+
+                    value: "   cpu".to_string(),
+                },
+            ])
+            .with_style(Style {
+                position_type: PositionType::Absolute,
+                position: UiRect::new(
+                    Val::Px(1000.0),
+                    SCOREBOARD_RIGHT,
+                    SCOREBOARD_TOP,
+                    SCOREBOARD_BOTTOM,
+                ),
+                ..default()
+            }),
+        )
+        .insert(Opponent);
 }
 
 fn spawn_camera(mut commands: Commands) {
@@ -325,6 +381,7 @@ fn check_for_collisions(
 fn score_goal(
     mut ball: Query<&mut Transform, With<Ball>>,
     goals: Query<&Transform, (Without<Ball>, With<Goal>)>,
+    mut score: ResMut<Score>,
 ) {
     let mut ball_pos = ball.single_mut();
     let ball_size = ball_pos.scale.truncate();
@@ -339,6 +396,24 @@ fn score_goal(
 
         if let Some(collision) = collision {
             ball_pos.translation = INITIAL_BALL_POSITION;
+            if collision == Collision::Left {
+                score.player += 1;
+            }
+            if collision == Collision::Right {
+                score.cpu += 1;
+            }
         }
     }
+}
+
+fn update_score(
+    mut player_score: Query<&mut Text, With<Player>>,
+    mut cpu_score: Query<&mut Text, (With<Opponent>, Without<Player>)>,
+    score: Res<Score>,
+) {
+    let mut player_text = player_score.single_mut();
+    let mut cpu_text = cpu_score.single_mut();
+
+    player_text.sections[1].value = score.player.to_string();
+    cpu_text.sections[0].value = score.cpu.to_string();
 }
